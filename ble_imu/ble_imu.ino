@@ -5,21 +5,27 @@
 #include <ArduinoBLE.h>
 #include <Arduino_LSM6DS3.h>
 
-#define DEBUG true
+#define DEBUG false
 
 // These UUIDs have been randomly generated. - they must match between the Central and Peripheral devices
 // Any changes you make here must be suitably made in the Python program as well
 
 BLEService nanoIMUService("13012F00-F8C3-4F4A-A8F4-15CD926DA146"); // BLE Service
 // Accelerometer and Gyroscope characteristics
-BLECharacteristic acclGyroCharacteristic("13012F01-F8C3-4F4A-A8F4-15CD926DA146", BLENotify, 24);
+BLECharacteristic acclGyroCharacteristic("13012F01-F8C3-4F4A-A8F4-15CD926DA146", BLENotify, 28);
 
 // IMU data packet
 typedef union {
-  float accgyr[6];
-  uint8_t bytes[24];
+  float timeaccgyr[7];
+  uint8_t bytes[28];
 } imuunion_t;
 
+typedef union {
+    unsigned long data;
+    uint8_t bytes[4];
+} ulongunion_t;
+
+ulongunion_t _time;
 imuunion_t _imudata;
 
 void setup() {
@@ -51,7 +57,7 @@ void setup() {
   BLE.addService(nanoIMUService);
 
   // set the initial value for the characeristic:
-  acclGyroCharacteristic.writeValue(_imudata.bytes, 24);
+  acclGyroCharacteristic.writeValue(_imudata.bytes, 28);
 
   // start advertising
   BLE.advertise();
@@ -72,9 +78,15 @@ void loop() {
     // while the central is still connected to peripheral:
     while (central.connected()) {
         if (IMU.accelerationAvailable() && IMU.gyroscopeAvailable()) {
-            IMU.readAcceleration(_imudata.accgyr[0], _imudata.accgyr[1], _imudata.accgyr[2]);
-            IMU.readGyroscope(_imudata.accgyr[3], _imudata.accgyr[4], _imudata.accgyr[5]);
-            acclGyroCharacteristic.writeValue(_imudata.bytes, 24);
+            // Get current time 
+            _time.data = micros();
+            // Update first four bytes of IMU data union.
+            for (int i = 0; i < 4;i ++) {
+                _imudata.bytes[i] = _time.bytes[i];
+            }
+            IMU.readAcceleration(_imudata.timeaccgyr[1], _imudata.timeaccgyr[2], _imudata.timeaccgyr[3]);
+            IMU.readGyroscope(_imudata.timeaccgyr[4], _imudata.timeaccgyr[5], _imudata.timeaccgyr[6]);
+            acclGyroCharacteristic.writeValue(_imudata.bytes, 28);
         }
     }
     
